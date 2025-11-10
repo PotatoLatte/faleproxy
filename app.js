@@ -34,7 +34,7 @@ app.post('/fetch', async (req, res) => {
 
     function applyReplacements(str) {
       // Replace every visible instance, case-insensitive
-      return String(str).replace(/yale/gi, 'Fale');
+      return String(str).replace(/yale/gi, 'Flail');
     }
     
     // Function to replace text but skip URLs and attributes
