@@ -1,65 +1,77 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-const { sampleHtmlWithYale } = require('./test-utils');
-const nock = require('nock');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const http = require('http');
+const { sampleHtmlWithYale } = require('./test-utils');
 
-// Use a non-conflicting port for the test server
-const TEST_PORT = 3099;
-const HOST = '127.0.0.1'; // ensure it matches what Nock allows
-let server;
-let tempAppPath;
+// Ports
+const HOST = '127.0.0.1';
+const TEST_PORT = 3099;   // proxy app (your app.js) runs here
+const SOURCE_PORT = 3101; // local source server serves sampleHtmlWithYale here
+
+let appServer;     // child process running app.test.js
+let tempAppPath;   // path to temp app file with patched port
+let sourceServer;  // local HTTP server serving sampleHtmlWithYale
 
 describe('Integration Tests', () => {
   beforeAll(async () => {
-    // Block all real net connects EXCEPT to our local test server
-    nock.disableNetConnect();
-    // Allow either 127.0.0.1 or localhost just in case
-    nock.enableNetConnect(new RegExp(`^(localhost|${HOST})(:\\d+)?$`));
-
+    // 1) Create a temporary copy of app.js with TEST_PORT
     const appPath = path.join(__dirname, '..', 'app.js');
     tempAppPath = path.join(__dirname, '..', 'app.test.js');
 
-    // Copy app.js and patch the PORT to the test port (cross-platform)
     const original = fs.readFileSync(appPath, 'utf8');
     const modified = original.replace('const PORT = 3001', `const PORT = ${TEST_PORT}`);
     fs.writeFileSync(tempAppPath, modified, 'utf8');
 
-    // Start the test server
-    server = spawn(process.execPath, [tempAppPath], {
+    // 2) Start the proxy app (child process)
+    appServer = spawn(process.execPath, [tempAppPath], {
       stdio: 'ignore'
     });
 
-    // Give the server a moment to boot
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-  }, 15000);
+    // 3) Start a local source server that serves sampleHtmlWithYale
+    sourceServer = http.createServer((req, res) => {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.end(sampleHtmlWithYale);
+    });
+
+    await new Promise((resolve, reject) => {
+      sourceServer.listen(SOURCE_PORT, HOST, (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+
+    // 4) Give the proxy app a moment to boot
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+  }, 20000);
 
   afterAll(async () => {
-    // Stop server and clean up temp file
-    if (server && server.pid) {
+    // Stop proxy app
+    if (appServer && appServer.pid) {
       try {
-        server.kill('SIGTERM');
+        appServer.kill('SIGTERM');
       } catch (_) {}
     }
+    // Remove temp file
     try {
       if (tempAppPath && fs.existsSync(tempAppPath)) {
         fs.unlinkSync(tempAppPath);
       }
     } catch (_) {}
 
-    nock.cleanAll();
-    nock.enableNetConnect();
+    // Stop source server
+    if (sourceServer) {
+      await new Promise((resolve) => sourceServer.close(() => resolve()));
+    }
   });
 
   test('Should replace Yale with Fale in fetched content', async () => {
-    // Mock the upstream page
-    nock('https://example.com').get('/').reply(200, sampleHtmlWithYale);
-
-    // Call our app
+    // Ask the proxy to fetch our local source server
     const response = await axios.post(`http://${HOST}:${TEST_PORT}/fetch`, {
-      url: 'https://example.com/'
+      url: `http://${HOST}:${SOURCE_PORT}/`
     });
 
     expect(response.status).toBe(200);
@@ -91,8 +103,8 @@ describe('Integration Tests', () => {
       // Should not reach here
       expect(true).toBe(false);
     } catch (error) {
-      // Our server returns a 500 with an error message for invalid fetches
-      expect(error.response.status).toBe(500);
+      // Our server returns a 500 for invalid fetches
+      expect(error.response && error.response.status).toBe(500);
     }
   });
 
@@ -102,7 +114,7 @@ describe('Integration Tests', () => {
       // Should not reach here
       expect(true).toBe(false);
     } catch (error) {
-      expect(error.response.status).toBe(400);
+      expect(error.response && error.response.status).toBe(400);
       expect(error.response.data.error).toBe('URL is required');
     }
   });
