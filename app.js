@@ -33,16 +33,9 @@ app.post('/fetch', async (req, res) => {
     const $ = cheerio.load(html);
 
     function applyReplacements(str) {
-      return String(str)
-        // YALE → FALE only when followed by "University"
-        .replace(/\bYALE(?=\s+University)/g, 'FALE')
-        // Yale → Fale for "University" and "College"
-        .replace(/\bYale(?=\s+University)/g, 'Fale')
-        .replace(/\bYale(?=\s+College)/g, 'Fale')
-        // yale → fale only when followed by "medical school"
-        .replace(/\byale(?=\s+medical school)/g, 'fale');
+      // Replace every visible instance, case-insensitive
+      return String(str).replace(/yale/gi, 'Fale');
     }
-
     
     // Function to replace text but skip URLs and attributes
     function replaceYaleWithFale(i, el) {
