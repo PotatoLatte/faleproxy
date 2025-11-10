@@ -6,21 +6,23 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
-// Set a different port for testing to avoid conflict with the main app
+// Use a non-conflicting port for the test server
 const TEST_PORT = 3099;
+const HOST = '127.0.0.1'; // ensure it matches what Nock allows
 let server;
 let tempAppPath;
 
 describe('Integration Tests', () => {
   beforeAll(async () => {
-    // Mock external HTTP requests, but allow localhost (server under test)
+    // Block all real net connects EXCEPT to our local test server
     nock.disableNetConnect();
-    nock.enableNetConnect('127.0.0.1');
+    // Allow either 127.0.0.1 or localhost just in case
+    nock.enableNetConnect(new RegExp(`^(localhost|${HOST})(:\\d+)?$`));
 
     const appPath = path.join(__dirname, '..', 'app.js');
     tempAppPath = path.join(__dirname, '..', 'app.test.js');
 
-    // Create a temporary test app file (copy + in-file port replace) using Node APIs (cross-platform)
+    // Copy app.js and patch the PORT to the test port (cross-platform)
     const original = fs.readFileSync(appPath, 'utf8');
     const modified = original.replace('const PORT = 3001', `const PORT = ${TEST_PORT}`);
     fs.writeFileSync(tempAppPath, modified, 'utf8');
@@ -30,12 +32,12 @@ describe('Integration Tests', () => {
       stdio: 'ignore'
     });
 
-    // Give the server time to start
+    // Give the server a moment to boot
     await new Promise((resolve) => setTimeout(resolve, 2000));
-  }, 15000); // a little extra time for startup on CI
+  }, 15000);
 
   afterAll(async () => {
-    // Kill the test server and clean up
+    // Stop server and clean up temp file
     if (server && server.pid) {
       try {
         server.kill('SIGTERM');
@@ -52,53 +54,51 @@ describe('Integration Tests', () => {
   });
 
   test('Should replace Yale with Fale in fetched content', async () => {
-    // Setup mock for example.com
+    // Mock the upstream page
     nock('https://example.com').get('/').reply(200, sampleHtmlWithYale);
 
-    // Make a request to our proxy app
-    const response = await axios.post(`http://localhost:${TEST_PORT}/fetch`, {
+    // Call our app
+    const response = await axios.post(`http://${HOST}:${TEST_PORT}/fetch`, {
       url: 'https://example.com/'
     });
 
     expect(response.status).toBe(200);
     expect(response.data.success).toBe(true);
 
-    // Verify Yale has been replaced with Fale in text
     const $ = cheerio.load(response.data.content);
     expect($('title').text()).toBe('Fale University Test Page');
     expect($('h1').text()).toBe('Welcome to Fale University');
     expect($('p').first().text()).toContain('Fale University is a private');
 
-    // Verify URLs remain unchanged
+    // URLs should remain unchanged
     const links = $('a');
     let hasYaleUrl = false;
     links.each((i, link) => {
       const href = $(link).attr('href');
-      if (href && href.includes('yale.edu')) {
-        hasYaleUrl = true;
-      }
+      if (href && href.includes('yale.edu')) hasYaleUrl = true;
     });
     expect(hasYaleUrl).toBe(true);
 
-    // Verify link text is changed
+    // Link text changed
     expect($('a').first().text()).toBe('About Fale');
   }, 15000);
 
   test('Should handle invalid URLs', async () => {
     try {
-      await axios.post(`http://localhost:${TEST_PORT}/fetch`, {
+      await axios.post(`http://${HOST}:${TEST_PORT}/fetch`, {
         url: 'not-a-valid-url'
       });
       // Should not reach here
       expect(true).toBe(false);
     } catch (error) {
+      // Our server returns a 500 with an error message for invalid fetches
       expect(error.response.status).toBe(500);
     }
   });
 
   test('Should handle missing URL parameter', async () => {
     try {
-      await axios.post(`http://localhost:${TEST_PORT}/fetch`, {});
+      await axios.post(`http://${HOST}:${TEST_PORT}/fetch`, {});
       // Should not reach here
       expect(true).toBe(false);
     } catch (error) {
