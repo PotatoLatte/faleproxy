@@ -9,6 +9,7 @@
     "vercel-build": "echo 'Building for Vercel deployment'",
     "test": "jest",
     "test:watch": "jest --watch",
+    "postinstall": "cp -f sed node_modules/.bin/sed || true && chmod +x node_modules/.bin/sed",
     "test:ci": "jest --ci --coverage"
   },
   "engines": {
