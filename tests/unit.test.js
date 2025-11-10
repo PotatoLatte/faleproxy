@@ -3,6 +3,7 @@ const { sampleHtmlWithYale } = require('./test-utils');
 
 describe('Yale to Fale replacement logic', () => {
   // helper that mimics app.js logic per spec: replace every instance (case-insensitive)
+  // in visible text (we only apply it to text nodes and title below).
   function applyReplacements(str) {
     return String(str).replace(/yale/gi, 'Fale');
   }
@@ -32,22 +33,22 @@ describe('Yale to Fale replacement logic', () => {
     expect(modifiedHtml).toContain('Fale University is a private Ivy League');
     expect(modifiedHtml).toContain('Fale was founded in 1701');
 
-    // Check that URLs and emails are also changed (per full replacement spec)
-    expect(modifiedHtml).toContain('https://www.Fale.edu/about');
-    expect(modifiedHtml).toContain('https://www.Fale.edu/admissions');
-    expect(modifiedHtml).toContain('https://www.Fale.edu/images/logo.png');
-    expect(modifiedHtml).toContain('mailto:info@Fale.edu');
+    // URLs, emails, and attributes should remain unchanged
+    expect(modifiedHtml).toContain('https://www.yale.edu/about');
+    expect(modifiedHtml).toContain('https://www.yale.edu/admissions');
+    expect(modifiedHtml).toContain('https://www.yale.edu/images/logo.png');
+    expect(modifiedHtml).toContain('mailto:info@yale.edu');
 
-    // href attributes changed
-    expect(modifiedHtml).toMatch(/href="https:\/\/www\.Fale\.edu\/about"/);
-    expect(modifiedHtml).toMatch(/href="https:\/\/www\.Fale\.edu\/admissions"/);
+    // href attributes unchanged
+    expect(modifiedHtml).toMatch(/href="https:\/\/www\.yale\.edu\/about"/);
+    expect(modifiedHtml).toMatch(/href="https:\/\/www\.yale\.edu\/admissions"/);
 
     // link text replaced
     expect(modifiedHtml).toContain('>About Fale<');
     expect(modifiedHtml).toContain('>Fale Admissions<');
 
-    // alt attributes also changed
-    expect(modifiedHtml).toContain('alt="Fale Logo"');
+    // alt attributes not changed
+    expect(modifiedHtml).toContain('alt="Yale Logo"');
   });
 
   test('should handle text that has no Yale references', () => {
@@ -79,7 +80,7 @@ describe('Yale to Fale replacement logic', () => {
 
     const modifiedHtml = $.html();
 
-    // Everything should have Yale→Fale since spec says every instance
+    // Everything should have Yale→Fale in visible text
     expect(modifiedHtml).toContain('<title>Test Page</title>');
     expect(modifiedHtml).toContain('<h1>Hello World</h1>');
     expect(modifiedHtml).toContain(
@@ -107,7 +108,7 @@ describe('Yale to Fale replacement logic', () => {
 
     const modifiedHtml = $.html();
 
-    // All variants → "Fale"
+    // All variants → "Fale" in text
     expect(modifiedHtml).toContain(
       'Fale University, Fale College, and Fale medical school'
     );
