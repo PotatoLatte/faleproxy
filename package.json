@@ -10,7 +10,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "postinstall": "cp -f sed node_modules/.bin/sed || true && chmod +x node_modules/.bin/sed",
-    "test:ci": "jest --ci --coverage"
+    "test:ci": "jest --ci --coverage --runInBand"
   },
   "engines": {
     "node": ">=18.x"
