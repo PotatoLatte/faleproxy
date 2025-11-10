@@ -31,6 +31,18 @@ app.post('/fetch', async (req, res) => {
 
     // Use cheerio to parse HTML and selectively replace text content, not URLs
     const $ = cheerio.load(html);
+
+    function applyReplacements(str) {
+      return String(str)
+        // YALE → FALE only when followed by "University"
+        .replace(/\bYALE(?=\s+University)/g, 'FALE')
+        // Yale → Fale for "University" and "College"
+        .replace(/\bYale(?=\s+University)/g, 'Fale')
+        .replace(/\bYale(?=\s+College)/g, 'Fale')
+        // yale → fale only when followed by "medical school"
+        .replace(/\byale(?=\s+medical school)/g, 'fale');
+    }
+
     
     // Function to replace text but skip URLs and attributes
     function replaceYaleWithFale(i, el) {
@@ -41,7 +53,7 @@ app.post('/fetch', async (req, res) => {
         // Only process if it's a text node
         if (content && $(el).children().length === 0) {
           // Replace Yale with Fale in text content only
-          content = content.replace(/Yale/g, 'Fale').replace(/yale/g, 'fale').replace(/YALE/g, 'FALE');
+          content = applyReplacements(content);
           $(el).html(content);
         }
       }
@@ -53,14 +65,14 @@ app.post('/fetch', async (req, res) => {
     }).each(function() {
       // Replace text content but not in URLs or attributes
       const text = $(this).text();
-      const newText = text.replace(/Yale/g, 'Fale').replace(/yale/g, 'fale').replace(/YALE/g, 'FALE');
+      const newText = applyReplacements(text);
       if (text !== newText) {
         $(this).replaceWith(newText);
       }
     });
     
     // Process title separately
-    const title = $('title').text().replace(/Yale/g, 'Fale').replace(/yale/g, 'fale').replace(/YALE/g, 'FALE');
+    const title = applyReplacements($('title').text());
     $('title').text(title);
     
     return res.json({ 
